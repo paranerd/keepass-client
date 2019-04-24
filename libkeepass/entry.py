@@ -2,6 +2,8 @@ import base64
 import hashlib
 from Crypto.Cipher import Salsa20
 
+from .attachment import Attachment
+
 class Entry:
 	def __init__(self, dom, protected_stream_key):
 		self.dom = dom
@@ -19,3 +21,13 @@ class Entry:
 
 	def get_raw(self, node_name):
 		return self.dom.xpath('./' + node_name)[0].text
+
+	def get_attachments(self):
+		attachments = []
+
+		for attachment in self.dom.xpath('./Binary'):
+			id = attachment.xpath('./Value/@Ref')[0]
+			filename = attachment.find('Key').text
+			attachments.append(Attachment(id, filename))
+
+		return attachments
