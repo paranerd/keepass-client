@@ -1,6 +1,5 @@
 import base64
 import hashlib
-from Crypto.Cipher import Salsa20
 
 from .attachment import Attachment
 

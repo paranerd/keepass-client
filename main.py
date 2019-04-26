@@ -19,7 +19,7 @@ class Keepass_Client:
 			print("--- Main Menu ---")
 			print("[1] Groups")
 			print("[P] Print database")
-			print("[Q] Quit")
+			print("[B] Quit")
 
 			selection = input("Select: ")
 			print()
@@ -27,7 +27,7 @@ class Keepass_Client:
 			if selection.lower() == 'q':
 				sys.exit()
 			elif selection.lower() == 'p':
-				print(self.database.get())
+				print(self.database.get(True))
 			elif selection.isdigit() and selection == '1':
 				self.show_menu_groups()
 				break
@@ -45,7 +45,7 @@ class Keepass_Client:
 			for idx, group in enumerate(groups):
 				print("[{idx}] {title}".format(idx = idx + 1, title = group.get_title()))
 
-			print("[M] Main Menu")
+			print("[B] Main Menu")
 			selection = input("Select group: ")
 			print()
 
@@ -70,7 +70,7 @@ class Keepass_Client:
 			for idx, entry in enumerate(entries):
 				print("[{idx}] {title}".format(idx = idx + 1, title = entry.get_title()))
 
-			print("[G] Groups")
+			print("[B] Groups")
 			selection = input("Select: ")
 			print()
 

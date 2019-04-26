@@ -6,6 +6,7 @@ import os
 from Crypto.Cipher import AES
 import struct
 import io
+import base64
 
 from . import crypto
 from .header import Header
@@ -40,6 +41,8 @@ class File:
 			# Extract header
 			self.header = Header(f_in)
 
+			self.header.write()
+
 			# Extract encrypted database
 			encrypted = f_in.read()
 
@@ -53,6 +56,21 @@ class File:
 		self.database = Database(io.BytesIO(decrypted), self.header.get('protected_stream_key'))
 
 		return self.database
+
+	def save(self):
+		outpath = os.path.join(os.path.dirname(self.path), 'out.kdbx')
+
+		with open(outpath, 'wb') as out:
+			# Write header
+			header = self.header.serialize()
+			out.write(header)
+
+			# Get header hash
+			hash = base64.b64encode(crypto.sha256(header))
+
+			# Write database
+			database = self.database.write(self.header, hash, self.master_key, iv)
+			out.write(database)
 
 	def generate_master_key(self):
 		# Generate composite key

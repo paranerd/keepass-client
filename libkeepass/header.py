@@ -1,5 +1,7 @@
 import struct
 
+KDB4_SIGNATURE = (0x9AA2D903, 0xB54BFB67)
+
 class Header:
 	fields = {
 		'end_of_header': 0,
@@ -44,11 +46,11 @@ class Header:
 			# Get data
 			field_data = struct.unpack('<' + str(field_length) + 's', stream.read(field_length))[0]
 
+			self.set(field_id, field_data)
+
 			# End of header
 			if field_id == 0:
 				break
-
-			self.set(field_id, field_data)
 
 	def get(self, key, raw=False):
 		# Convert string key to int if necessary
@@ -72,3 +74,28 @@ class Header:
 
 	def convert(self, type, bytes):
 		return struct.unpack(type, bytes)[0]
+
+	def serialize(self):
+		# Serialize header to stream
+		header = bytearray()
+
+		# Write file signature
+		header.extend(struct.pack('<II', *KDB4_SIGNATURE))
+
+		# Write version
+		header.extend(struct.pack('<hh', 1, 3))
+
+		field_ids = list(self.data.keys())
+		field_ids.sort()
+		# field_id 0 must be last
+		field_ids.append(field_ids.pop(0))
+
+		for field_id in field_ids:
+			value = self.data_raw[field_id]
+			print("{} -> {}".format(field_id, value))
+			length = len(value)
+			header.extend(struct.pack('<b', field_id))
+			header.extend(struct.pack('<h', length))
+			header.extend(struct.pack('{}s'.format(length), value))
+
+		return header
