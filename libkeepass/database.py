@@ -1,10 +1,11 @@
 import struct
 import hashlib
 import base64
-from lxml import etree
+from lxml import etree, objectify
 from Crypto.Cipher import Salsa20
 import io
-import hashlib
+import datetime
+import uuid
 
 from . import crypto
 from . import util
@@ -14,9 +15,9 @@ class Database:
 	def __init__(self, stream, protected_stream_key):
 		self.protected_stream_key = protected_stream_key
 
-		self.read(stream)
+		self.deserialize(stream)
 
-	def read(self, stream):
+	def deserialize(self, stream):
 		# Index (4 bytes)
 		index = struct.unpack('<I', stream.read(4))[0]
 
@@ -33,13 +34,15 @@ class Database:
 		self.root = etree.fromstring(data)
 
 		# Objectify
-		#self.tree = objectify.parse(payload)
-		#objectify.deannotate(self.tree, pytype=True, cleanup_namespaces=True)
-		#self.obj_root = self.tree.getroot()
+		'''fileobject = io.BytesIO(data)
+		self.tree = objectify.parse(fileobject)
+		objectify.deannotate(self.tree, pytype=True, cleanup_namespaces=True)
+		self.obj_root = self.tree.getroot()'''
 
 		self.unprotect()
 
-	def hash(self, stream):
+	def hash_old(self):
+		stream = io.BytesIO()
 		bytes = io.BytesIO(self.get())
 
 		index = 0
@@ -56,31 +59,43 @@ class Database:
 				stream.write(struct.pack('<I', 0))
 				break
 
-	def write(self, header, hash, master_key, iv):
-		# Add (header) hash to Meta/HeaderHash (create if not exists: etree.SubElement(self.obj_root.Meta, "HeaderHash"))
+		return stream
+
+	def hash(self):
+		stream = bytearray()
+		bytes = io.BytesIO(self.get())
+
+		index = 0
+		while True:
+			data = bytes.read(1024 * 1024)
+			if data:
+				stream.extend(struct.pack('<I', index))
+				stream.extend(hashlib.sha256(data).digest())
+				stream.extend(struct.pack('<I', len(data)))
+				stream.extend(data)
+				index += 1
+			else:
+				stream.extend(struct.pack('<I', index))
+				stream.extend(b'\x00' * 32)
+				stream.extend(struct.pack('<I', 0))
+				break
+
+		return stream
+
+
+	def serialize(self, header_hash):
+		# Add header hash to Meta/HeaderHash
+		#if len(self.root.xpath("/KeePassFile/Meta/HeaderHash")) < 1:
+			#etree.SubElement(self.root.xpath("/KeePassFile/Meta")[0], "HeaderHash")
+
+		#dom_header_hash = self.root.xpath("/KeePassFile/Meta/HeaderHash")[0]
+		#dom_header_hash.text = header_hash
 
 		# Protect
 		self.protect()
 
-		stream = io.BytesIO()
-
 		# Add hashed database
-		self.hash(stream)
-
-		# Add start bytes
-		stream.write(header.get('stream_start_bytes', True))
-
-		return self.encrypt(stream, master_key, iv)
-
-	def encrypt(self, stream, key, iv):
-		print("encrypt")
-		data = crypto.pad(stream.read())
-
-		return crypto.aes_cbc_encrypt(data, key, iv)
-
-	def decrypt(self, master_key):
-		print("decrypt")
-
+		return self.hash()
 
 	def get(self, print=False):
 		pp = etree.tostring(self.root, pretty_print=True, encoding='utf-8', standalone=True)
@@ -131,7 +146,8 @@ class Database:
 		set to 'False'
 		"""
 		self._reset_salsa()
-		#self.obj_root.Meta.MemoryProtection.ProtectPassword._setText('False')
+		self.root.xpath('.//Meta/MemoryProtection/ProtectPassword')[0].text = 'False'
+
 		for elem in self.root.iterfind('.//Value[@Protected="True"]'):
 			if elem.text is not None:
 				elem.set('ProtectedValue', elem.text)
@@ -147,7 +163,7 @@ class Database:
 		@return string
 		"""
 		tmp = base64.b64decode(string.encode("utf-8"))
-		return util.xor(tmp, self._get_salsa(len(tmp))).decode("utf-8")
+		return crypto.xor(tmp, self._get_salsa(len(tmp))).decode("utf-8")
 
 	def protect(self):
 		"""
@@ -163,7 +179,8 @@ class Database:
 		deleting entry history items.
 		"""
 		self._reset_salsa()
-		#self.obj_root.Meta.MemoryProtection.ProtectPassword._setText('True')
+		self.root.xpath('.//Meta/MemoryProtection/ProtectPassword')[0].text = 'True'
+
 		for elem in self.root.iterfind('.//Value[@Protected="False"]'):
 			if elem.text is not None:
 				elem.attrib.pop('ProtectedValue', None)
@@ -176,7 +193,7 @@ class Database:
 		Returns a protected string.
 		"""
 		encoded = string.encode("utf-8")
-		tmp = xor(encoded, self._get_salsa(len(encoded)))
+		tmp = crypto.xor(encoded, self._get_salsa(len(encoded)))
 		return base64.b64encode(tmp).decode("utf-8")
 
 	def get_groups(self):
@@ -187,6 +204,13 @@ class Database:
 		"""
 		groups = []
 		for dom_group in self.root.xpath('./Root/Group/Group'):
-			groups.append(Group(dom_group, self.protected_stream_key))
+			groups.append(Group.fromxml(dom_group))
 
 		return groups
+
+	def add_group(self, name):
+		groups = self.root.xpath('./Root/Group')[0]
+		group = Group.create(name)
+		groups.append(group.get_xml())
+
+		return group.get_id()

@@ -8,6 +8,8 @@ import struct
 import io
 import base64
 
+import hashlib
+
 from . import crypto
 from .header import Header
 from .database import Database
@@ -29,19 +31,17 @@ class File:
 		encrypted = ""
 
 		with open(self.path, "rb") as f_in:
-			# Extract signature (2x 4 bytes)
+			# Extract signature (2 * 4 bytes)
 			self.signature = struct.unpack('<II', f_in.read(8))
 
 			if self.signature != KDB4_SIGNATURE:
 				raise Exception("Signature does not match")
 
-			# Extract version (2x 2 bytes) -> (minor, major)
+			# Extract version (2 * 2 bytes) -> (minor, major)
 			self.version = struct.unpack('<hh', f_in.read(4))
 
 			# Extract header
 			self.header = Header(f_in)
-
-			self.header.write()
 
 			# Extract encrypted database
 			encrypted = f_in.read()
@@ -57,20 +57,41 @@ class File:
 
 		return self.database
 
-	def save(self):
-		outpath = os.path.join(os.path.dirname(self.path), 'out.kdbx')
+	def save(self, path=None):
+		print("Saving...")
+		outpath = path if path is not None else self.path
 
 		with open(outpath, 'wb') as out:
+			# Write signature
+			signature = struct.pack('<II', *KDB4_SIGNATURE)
+			out.write(signature)
+
+			# Write version
+			version = struct.pack('<hh', 1, 3)
+			out.write(version)
+
 			# Write header
 			header = self.header.serialize()
 			out.write(header)
 
-			# Get header hash
-			hash = base64.b64encode(crypto.sha256(header))
+			# Get hash
+			hash = base64.b64encode(crypto.sha256(signature + version + header))
 
-			# Write database
-			database = self.database.write(self.header, hash, self.master_key, iv)
-			out.write(database)
+			# Get database
+			database = self.database.serialize(hash)
+
+			# Add stream start bytes
+			payload = self.header.get('stream_start_bytes', True) + database
+
+			# Encrypt
+			encrypted = self.encrypt(payload)
+
+			out.write(encrypted)
+
+	def encrypt(self, stream):
+		data = crypto.pad(stream)
+
+		return crypto.aes_cbc_encrypt(data, self.master_key, self.header.get('encryption_iv'))
 
 	def generate_master_key(self):
 		# Generate composite key

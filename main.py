@@ -1,3 +1,4 @@
+import os
 import sys
 import getopt
 import signal
@@ -8,8 +9,8 @@ class Keepass_Client:
 	active_group = None
 
 	def __init__(self, path):
-		#passphrase = input("Passphrase: ")
-		self.passphrase = "test"
+		self.path = path
+		self.passphrase = "test" #input("Passphrase: ")
 		self.keepass = File(path, self.passphrase)
 		self.database = self.keepass.open()
 
@@ -19,6 +20,7 @@ class Keepass_Client:
 			print("--- Main Menu ---")
 			print("[1] Groups")
 			print("[P] Print database")
+			print("[S] Save database")
 			print("[B] Quit")
 
 			selection = input("Select: ")
@@ -28,6 +30,9 @@ class Keepass_Client:
 				sys.exit()
 			elif selection.lower() == 'p':
 				print(self.database.get(True))
+			elif selection.lower() == 's':
+				path = os.path.join(os.path.dirname(self.path), 'out.kdbx')
+				self.keepass.save(path)
 			elif selection.isdigit() and selection == '1':
 				self.show_menu_groups()
 				break
@@ -45,12 +50,18 @@ class Keepass_Client:
 			for idx, group in enumerate(groups):
 				print("[{idx}] {title}".format(idx = idx + 1, title = group.get_title()))
 
+			print("[A] Add Group")
 			print("[B] Main Menu")
-			selection = input("Select group: ")
+			selection = input("Select: ")
 			print()
 
-			if selection.lower() == 'm':
+			if selection.lower() == 'b':
 				self.show_menu_main()
+				break
+			elif selection.lower() == 'a':
+				name = input("Name: ")
+				self.database.add_group(name)
+				self.show_menu_groups()
 				break
 			elif selection.isdigit() and int(selection) <= len(groups):
 				self.active_group = groups[int(selection) - 1]
@@ -70,12 +81,19 @@ class Keepass_Client:
 			for idx, entry in enumerate(entries):
 				print("[{idx}] {title}".format(idx = idx + 1, title = entry.get_title()))
 
+			print("[A] Add Entry")
 			print("[B] Groups")
 			selection = input("Select: ")
 			print()
 
-			if selection.lower() == 'g':
+			if selection.lower() == 'b':
 				self.show_menu_groups()
+				break
+			elif selection.lower() == 'a':
+				title = input("Title: ")
+				password = input("Password: ")
+				group.add_entry(title, None, password)
+				self.show_menu_entries()
 				break
 			elif selection.isdigit() and int(selection) <= len(entries):
 				self.show_entry(entries[int(selection) - 1])
@@ -97,8 +115,8 @@ class Keepass_Client:
 		self.show_menu_entries()
 
 def signal_handler(sig, frame):
-        print('Quit.')
-        sys.exit(0)
+	print('Quit.')
+	sys.exit(0)
 
 if __name__ == "__main__":
 	# Catch Ctrl+C

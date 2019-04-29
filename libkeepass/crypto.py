@@ -21,3 +21,7 @@ def aes_cbc_encrypt(data, key, enc_iv):
 	"""Encrypt and return `data` with AES CBC."""
 	cipher = AES.new(key, AES.MODE_CBC, enc_iv)
 	return cipher.encrypt(data)
+
+def xor(aa, bb):
+	"""Return a bytearray of a bytewise XOR of `aa` and `bb`."""
+	return bytearray([a ^ b for a, b in zip(bytearray(aa), bytearray(bb))])
