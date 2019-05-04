@@ -31,8 +31,9 @@ class Keepass_Client:
 			elif selection.lower() == 'p':
 				print(self.database.get(True))
 			elif selection.lower() == 's':
-				path = os.path.join(os.path.dirname(self.path), 'out.kdbx')
-				self.keepass.save(path)
+				#path = os.path.join(os.path.dirname(self.path), 'out.kdbx')
+				#self.keepass.save(path)
+				self.keepass.save(self.path)
 			elif selection.isdigit() and selection == '1':
 				self.show_menu_groups()
 				break
@@ -101,6 +102,36 @@ class Keepass_Client:
 			else:
 				print("Invalid input")
 
+	def show_menu_entry(self, entry):
+		while True:
+			print()
+			print("[A] Add attachment")
+			print("[B] Entries")
+
+			selection = input("Select: ")
+			print()
+
+			if selection.lower() == 'b':
+				self.show_menu_entries()
+				break
+			elif selection.lower() == 'a':
+				self.add_attachment(entry)
+			else:
+				print("Invalid input")
+
+	def add_attachment(self, entry):
+		while True:
+			path = input("Path: ")
+
+			if path and os.path.isfile(path):
+				with open(path, 'rb') as file:
+					content = file.read()
+					ref_id = self.database.add_attachment(content)
+					entry.add_attachment(os.path.basename(path), ref_id)
+				break
+			else:
+				print("File does not exist")
+
 	def show_entry(self, entry):
 		print()
 		print("--- {title} ---".format(title = entry.get_title()))
@@ -112,7 +143,7 @@ class Keepass_Client:
 		for attachment in attachments:
 			print("Attachment: {} [{}]".format(attachment.get_filename(), attachment.get_id()))
 
-		self.show_menu_entries()
+		self.show_menu_entry(entry)
 
 def signal_handler(sig, frame):
 	print('Quit.')

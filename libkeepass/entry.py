@@ -3,6 +3,8 @@ import hashlib
 import uuid
 import datetime
 
+from lxml import etree
+
 from . import util
 from .attachment import Attachment
 
@@ -93,7 +95,7 @@ class Entry:
 		return self.xml.xpath('./String[Key = "Username"]/Value')[0].text
 
 	def get_password(self):
-		return self.xml.xpath('./String[Key = "Password"]/Value')[0]
+		return self.xml.xpath('./String[Key = "Password"]/Value')[0].text
 
 	def get_url(self):
 		return self.xml.xpath('./String[Key = "URL"]/Value')[0].text
@@ -107,3 +109,12 @@ class Entry:
 			attachments.append(Attachment(id, filename))
 
 		return attachments
+
+	def add_attachment(self, filename, id):
+		attachment = "\
+			<Binary>\
+				<Key>{}</Key>\
+				<Value Ref=\"{}\"/>\
+			</Binary>".format(filename, id)
+
+		self.xml.append(etree.fromstring(attachment))

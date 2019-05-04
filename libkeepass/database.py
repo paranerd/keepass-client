@@ -113,6 +113,40 @@ class Database:
 		else:
 			return ""
 
+	def add_attachment(self, content):
+		# Encode content
+		encoded = base64.b64encode(content).decode("utf-8")
+
+		# Get parent node
+		node_binaries = self.root.xpath("/KeePassFile/Meta/Binaries")[0]
+
+		# Check if content exists
+		exists = node_binaries.xpath("./Binary[text()=\"{}\"]".format(encoded))
+
+		if len(exists):
+			return exists[0].get('ID')
+
+		next_id = self.get_next_attachment_id()
+
+		# Create attachment node
+		binary = "<Binary ID=\"{}\">{}</Binary>".format(next_id, encoded)
+
+		# Add attachment
+		node_binaries.append(etree.fromstring(binary))
+
+		return next_id
+
+	def get_next_attachment_id(self):
+		next_id = 0
+
+		ids = self.root.xpath("/KeePassFile/Meta/Binaries/Binary/@ID")
+
+		for id in ids:
+			if int(id) > next_id:
+				next_id = int(id)
+
+		return str(next_id + 1)
+
 	def _reset_salsa(self):
 		"""
 		Clear the salsa buffer and reset algorithm
