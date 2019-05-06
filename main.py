@@ -32,7 +32,6 @@ class Keepass_Client:
 				print(self.database.get(True))
 			elif selection.lower() == 's':
 				#path = os.path.join(os.path.dirname(self.path), 'out.kdbx')
-				#self.keepass.save(path)
 				self.keepass.save(self.path)
 			elif selection.isdigit() and selection == '1':
 				self.show_menu_groups()
@@ -106,6 +105,7 @@ class Keepass_Client:
 		while True:
 			print()
 			print("[A] Add attachment")
+			print("[R] Remove attachment")
 			print("[B] Entries")
 
 			selection = input("Select: ")
@@ -116,6 +116,8 @@ class Keepass_Client:
 				break
 			elif selection.lower() == 'a':
 				self.add_attachment(entry)
+			elif selection.lower() == 'r':
+				self.remove_attachment(entry)
 			else:
 				print("Invalid input")
 
@@ -124,13 +126,25 @@ class Keepass_Client:
 			path = input("Path: ")
 
 			if path and os.path.isfile(path):
+				filename = os.path.basename(path)
 				with open(path, 'rb') as file:
+
 					content = file.read()
-					ref_id = self.database.add_attachment(content)
-					entry.add_attachment(os.path.basename(path), ref_id)
+					ref_id = self.database.add_attachment(entry, filename, content)
 				break
 			else:
 				print("File does not exist")
+
+	def remove_attachment(self, entry):
+		id = int(input("Which one: "))
+
+		attachments = entry.get_attachments()
+
+		if id >= len(attachments):
+			print("Invalid input")
+		else:
+			self.database.remove_attachment(entry, attachments[id])
+			print("Attachment removed")
 
 	def show_entry(self, entry):
 		print()
@@ -140,8 +154,11 @@ class Keepass_Client:
 
 		attachments = entry.get_attachments()
 
-		for attachment in attachments:
-			print("Attachment: {} [{}]".format(attachment.get_filename(), attachment.get_id()))
+		if len(attachments):
+			print("Attachments:")
+
+		for idx, attachment in enumerate(attachments):
+			print("({}) Attachment: {}".format(idx, attachment.get_filename()))
 
 		self.show_menu_entry(entry)
 

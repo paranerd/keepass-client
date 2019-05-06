@@ -6,6 +6,7 @@ from Crypto.Cipher import Salsa20
 import io
 import datetime
 import uuid
+import re
 
 from . import crypto
 from . import util
@@ -13,55 +14,47 @@ from .group import Group
 
 class Database:
 	def __init__(self, stream, protected_stream_key):
+		"""
+		Constructor
+
+		@param bytes stream
+		@param string protected_stream_key
+		"""
 		self.protected_stream_key = protected_stream_key
 
 		self.deserialize(stream)
 
 	def deserialize(self, stream):
+		"""
+		Get database XML from bytes
+		Read bytes first, then unprotect values
+
+		@param bytes stream
+		"""
 		# Index (4 bytes)
 		index = struct.unpack('<I', stream.read(4))[0]
 
 		# Hash (32 bytes)
-		hash = struct.unpack('<32s', stream.read(32))[0] #payload.read(32)
+		hash = struct.unpack('<32s', stream.read(32))[0]
 
 		# Length (4 bytes)
-		length = struct.unpack('<I', stream.read(4))[0] # self.stream_unpack(payload, 4, 'I')
+		length = struct.unpack('<I', stream.read(4))[0]
 
 		# Data
-		data = struct.unpack('<{}s'.format(length), stream.read(length))[0] # payload.read(length)
+		data = struct.unpack('<{}s'.format(length), stream.read(length))[0]
 
 		# Get root node
-		self.root = etree.fromstring(data)
-
-		# Objectify
-		'''fileobject = io.BytesIO(data)
-		self.tree = objectify.parse(fileobject)
-		objectify.deannotate(self.tree, pytype=True, cleanup_namespaces=True)
-		self.obj_root = self.tree.getroot()'''
+		parser = etree.XMLParser(remove_blank_text=True)
+		self.root = etree.fromstring(data, parser=parser)
 
 		self.unprotect()
 
-	def hash_old(self):
-		stream = io.BytesIO()
-		bytes = io.BytesIO(self.get())
-
-		index = 0
-		while True:
-			data = bytes.read(1024 * 1024)
-			if data:
-				stream.write(struct.pack('<I', index))
-				stream.write(hashlib.sha256(data).digest())
-				stream.write(data)
-				index += 1
-			else:
-				stream.write(struct.pack('<I', index))
-				stream.write(b'\x00' * 32)
-				stream.write(struct.pack('<I', 0))
-				break
-
-		return stream
-
 	def hash(self):
+		"""
+		Convert database XML to hashed blocks as bytes
+
+		@return bytearray
+		"""
 		stream = bytearray()
 		bytes = io.BytesIO(self.get())
 
@@ -84,59 +77,44 @@ class Database:
 
 
 	def serialize(self, header_hash):
-		# Add header hash to Meta/HeaderHash
-		#if len(self.root.xpath("/KeePassFile/Meta/HeaderHash")) < 1:
-			#etree.SubElement(self.root.xpath("/KeePassFile/Meta")[0], "HeaderHash")
+		"""
+		Get database as bytes
+		Protect values first, then convert XML to hashed blocks
 
-		#dom_header_hash = self.root.xpath("/KeePassFile/Meta/HeaderHash")[0]
-		#dom_header_hash.text = header_hash
+		@param string header_hash
+		@return bytearray
+		"""
+		# Add header hash to Meta/HeaderHash
+		if len(self.root.xpath("/KeePassFile/Meta/HeaderHash")) < 1:
+			etree.SubElement(self.root.xpath("/KeePassFile/Meta")[0], "HeaderHash")
+
+		dom_header_hash = self.root.xpath("/KeePassFile/Meta/HeaderHash")[0]
+		dom_header_hash.text = header_hash
 
 		# Protect
 		self.protect()
 
-		# Add hashed database
+		# Return database as hashed blocks
 		return self.hash()
 
 	def get(self, print=False):
-		pp = etree.tostring(self.root, pretty_print=True, encoding='utf-8', standalone=True)
-
+		"""
+		Return pretty printed database
+		"""
 		if print:
+			pp = etree.tostring(self.root, pretty_print=True, encoding='utf-8', standalone=True)
 			pp = str(pp, encoding='utf-8')
+		else:
+			pp = etree.tostring(self.root, encoding='utf-8', standalone=True)
 
 		return pp
 
-	def get_attachment(self, id):
-		attachment = self.root.xpath('/KeePassFile/Meta/Binaries/Binary[@ID={}]'.format(id))
-
-		if len(attachment) > 0:
-			return attachment[0].text
-		else:
-			return ""
-
-	def add_attachment(self, content):
-		# Encode content
-		encoded = base64.b64encode(content).decode("utf-8")
-
-		# Get parent node
-		node_binaries = self.root.xpath("/KeePassFile/Meta/Binaries")[0]
-
-		# Check if content exists
-		exists = node_binaries.xpath("./Binary[text()=\"{}\"]".format(encoded))
-
-		if len(exists):
-			return exists[0].get('ID')
-
-		next_id = self.get_next_attachment_id()
-
-		# Create attachment node
-		binary = "<Binary ID=\"{}\">{}</Binary>".format(next_id, encoded)
-
-		# Add attachment
-		node_binaries.append(etree.fromstring(binary))
-
-		return next_id
-
 	def get_next_attachment_id(self):
+		"""
+		Get next attachment ID
+
+		@return string
+		"""
 		next_id = 0
 
 		ids = self.root.xpath("/KeePassFile/Meta/Binaries/Binary/@ID")
@@ -184,20 +162,20 @@ class Database:
 
 		for elem in self.root.iterfind('.//Value[@Protected="True"]'):
 			if elem.text is not None:
+				# Remember protected value
 				elem.set('ProtectedValue', elem.text)
+
+				# Set protected attribute to false
 				elem.set('Protected', 'False')
-				elem.text = self._unprotect(elem.text)
 
-	def _unprotect(self, string):
-		"""
-		Base64 decode and XOR the given `string` with the next salsa.
-		Returns an unprotected string
+				# Base64-decode protected value
+				decoded = base64.b64decode(elem.text.encode("utf-8"))
 
-		@param string string
-		@return string
-		"""
-		tmp = base64.b64decode(string.encode("utf-8"))
-		return crypto.xor(tmp, self._get_salsa(len(tmp))).decode("utf-8")
+				# Decrypt value
+				decrypted = crypto.xor(decoded, self._get_salsa(len(decoded))).decode("utf-8")
+
+				# Set value
+				elem.text = decrypted
 
 	def protect(self):
 		"""
@@ -217,18 +195,21 @@ class Database:
 
 		for elem in self.root.iterfind('.//Value[@Protected="False"]'):
 			if elem.text is not None:
+				# Remove protected value attribute
 				elem.attrib.pop('ProtectedValue', None)
-				elem.set('Protected', 'True')
-				elem.text = self._protect(elem.text)
 
-	def _protect(self, string):
-		"""
-		XORs the given `string` with the next salsa and base64 encodes it.
-		Returns a protected string.
-		"""
-		encoded = string.encode("utf-8")
-		tmp = crypto.xor(encoded, self._get_salsa(len(encoded)))
-		return base64.b64encode(tmp).decode("utf-8")
+				# Set protected to true
+				elem.set('Protected', 'True')
+
+				# Encrypt value
+				value_utf8 = elem.text.encode("utf-8")
+				encrypted = crypto.xor(value_utf8, self._get_salsa(len(value_utf8)))
+
+				# Base64-encode encrypted value
+				encoded = base64.b64encode(encrypted).decode("utf-8")
+
+				# Set value
+				elem.text = encoded
 
 	def get_groups(self):
 		"""
@@ -243,8 +224,83 @@ class Database:
 		return groups
 
 	def add_group(self, name):
+		"""
+		Add new group
+
+		@param string name
+		@return int
+		"""
 		groups = self.root.xpath('./Root/Group')[0]
 		group = Group.create(name)
 		groups.append(group.get_xml())
 
 		return group.get_id()
+
+	def get_attachment(self, id):
+		"""
+		Get attachment filename
+
+		@param string id
+		@return string
+		"""
+		attachment = self.root.xpath('/KeePassFile/Meta/Binaries/Binary[@ID={}]'.format(id))
+
+		if len(attachment) > 0:
+			return attachment[0].text
+		else:
+			return ""
+
+	def add_attachment(self, entry, filename, content):
+		"""
+		Add attachment to database and entry node
+
+		@param Entry entry
+		@param string filename
+		@param bytes content
+		@return string
+		"""
+		# Encode content
+		encoded = base64.b64encode(content).decode("utf-8")
+
+		# Get attachments parent node
+		node_binaries = self.root.xpath("/KeePassFile/Meta/Binaries")[0]
+
+		# Check if content exists
+		exists = node_binaries.xpath("./Binary[text()=\"{}\"]".format(encoded))
+
+		if len(exists):
+			# Attachment already exists, just get the reference ID
+			next_id = exists[0].get('ID')
+		else:
+			# Attachment does not exist yet, create it
+			next_id = self.get_next_attachment_id()
+
+			# Create attachment node
+			binary = etree.Element("Binary")
+			binary.set("ID", next_id)
+			binary.text = encoded
+
+			# Add attachment to database
+			node_binaries.append(binary)
+
+		# Add attachment to entry
+		entry.add_attachment(filename, next_id)
+
+		return next_id
+
+	def remove_attachment(self, entry, attachment):
+		"""
+		Remove attachment
+
+		@param Entry entry
+		@param Attachment attachment
+		"""
+		# Is the attachment used anywhere else?
+		used = self.root.xpath('//Binary/Value[@Ref="{}"]'.format(attachment.get_id()))
+
+		if len(used) == 1:
+			# Remove attachment from database
+			node_binary = self.root.xpath('/KeePassFile/Meta/Binaries/Binary[@ID="{}"]'.format(attachment.get_id()))[0]
+			node_binary.getparent().remove(node_binary)
+
+		entry.remove_attachment(attachment)

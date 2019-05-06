@@ -58,7 +58,6 @@ class File:
 		return self.database
 
 	def save(self, path=None):
-		print("Saving...")
 		outpath = path if path is not None else self.path
 
 		with open(outpath, 'wb') as out:
@@ -119,19 +118,13 @@ class File:
 
 	def decrypt(self, encrypted):
 		cipher = AES.new(self.master_key, AES.MODE_CBC, self.header.get('encryption_iv'))
-		decrypted = self.unpad(cipher.decrypt(encrypted))
+		decrypted = crypto.unpad(cipher.decrypt(encrypted))
 
 		# Check decryption
 		if decrypted[:len(self.header.get('stream_start_bytes'))] == self.header.get('stream_start_bytes'):
 			return decrypted[len(self.header.get('stream_start_bytes')):]
 		else:
 			raise Exception("Decryption failed")
-
-	def pad(self, s):
-		return s + (self.block_size - len(s) % self.block_size) * chr(self.block_size - len(s) % self.block_size)
-
-	def unpad(self, s):
-		return s[:-ord(s[len(s)-1:])]
 
 	def stream_unpack(self, bytes, length, type):
 		return struct.unpack('<' + type, bytes.read(length))[0]

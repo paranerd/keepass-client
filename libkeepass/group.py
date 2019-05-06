@@ -65,8 +65,8 @@ class Group:
 	def get_entries(self):
 		entries = []
 
-		for xml_entry in self.xml.xpath('./Entry'):
-			entries.append(Entry.fromxml(xml_entry))
+		for entry_xml in self.xml.xpath('./Entry'):
+			entries.append(Entry.fromxml(entry_xml))
 
 		return entries
 

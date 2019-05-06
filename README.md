@@ -1,4 +1,6 @@
-# keepass-client
+# KeePy
+
+A KeePass implementation in Python3
 
 ## Prerequisites
 ```

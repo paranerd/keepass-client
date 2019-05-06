@@ -10,6 +10,11 @@ from .attachment import Attachment
 
 class Entry:
 	def __init__(self, xml):
+		"""
+		Constructor
+
+		@param ElementTree xml
+		"""
 		self.xml = xml
 
 	@classmethod
@@ -18,6 +23,8 @@ class Entry:
 		Parse entry from xml
 		Wrapper for the constructor, acts as syntactic sugar
 		to describe the purpose of this constructing method better
+
+		@param ElementTree xml
 		"""
 		return cls(xml)
 
@@ -25,6 +32,12 @@ class Entry:
 	def create(cls, title, username=None, password=None, url=None, notes=None):
 		"""
 		Create new entry
+
+		@param string title
+		@param string username
+		@param string password
+		@param string url
+		@param string notes
 		"""
 		id = base64.b64encode(uuid.uuid1().bytes).decode('utf-8')
 		now = datetime.datetime.utcnow().isoformat()
@@ -80,41 +93,90 @@ class Entry:
 		return cls(xml)
 
 	def get_xml(self):
+		"""
+		Get the XML-representation of the entry
+
+		@return ElementTree
+		"""
 		return self.xml
 
 	def get_id(self):
+		"""
+		Get ID
+
+		@return string
+		"""
 		return self.xml.xpath('./UUID')[0].text
 
 	def get_title(self):
+		"""
+		Get title
+
+		@return string
+		"""
 		return self.xml.xpath('./String[Key = "Title"]/Value')[0].text
 
 	def get_notes(self):
+		"""
+		Get notes
+
+		@return string
+		"""
 		return self.xml.xpath('./String[Key = "Notes"]/Value')[0].text
 
 	def get_username(self):
+		"""
+		Get username
+
+		@return string
+		"""
 		return self.xml.xpath('./String[Key = "Username"]/Value')[0].text
 
 	def get_password(self):
+		"""
+		Get password
+
+		@return string
+		"""
 		return self.xml.xpath('./String[Key = "Password"]/Value')[0].text
 
 	def get_url(self):
+		"""
+		Get URL
+
+		@return string
+		"""
 		return self.xml.xpath('./String[Key = "URL"]/Value')[0].text
 
 	def get_attachments(self):
+		"""
+		Get attachments
+
+		@return list[Attachment]
+		"""
 		attachments = []
 
-		for attachment in self.xml.xpath('./Binary'):
-			id = attachment.xpath('./Value/@Ref')[0]
-			filename = attachment.find('Key').text
-			attachments.append(Attachment(id, filename))
+		for attachment_xml in self.xml.xpath('./Binary'):
+			attachments.append(Attachment.fromxml(attachment_xml))
 
 		return attachments
 
 	def add_attachment(self, filename, id):
-		attachment = "\
-			<Binary>\
-				<Key>{}</Key>\
-				<Value Ref=\"{}\"/>\
-			</Binary>".format(filename, id)
+		"""
+		Add attachment
 
-		self.xml.append(etree.fromstring(attachment))
+		@param string filename
+		@param string id
+		"""
+		attachment = Attachment.create(id, filename)
+		self.xml.append(attachment.get_xml())
+
+	def remove_attachment(self, attachment):
+		"""
+		Remove attachment
+
+		@param Attachment attachment
+		"""
+
+		attachment = self.xml.xpath('./Binary[Key="{}"][Value[@Ref="{}"]]'.format(attachment.get_filename(), attachment.get_id()))[0]
+		attachment.getparent().remove(attachment)
