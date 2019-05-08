@@ -3,16 +3,14 @@ import sys
 import getopt
 import signal
 
-from libkeepass.file import File
+from libkeepass import keepass
 
 class Keepass_Client:
 	active_group = None
 
 	def __init__(self, path):
-		self.path = path
-		self.passphrase = "test" #input("Passphrase: ")
-		self.keepass = File(path, self.passphrase)
-		self.database = self.keepass.open()
+		passphrase = "test" #input("Passphrase: ")
+		keepass.open(path, passphrase)
 
 	def show_menu_main(self):
 		while True:
@@ -29,10 +27,9 @@ class Keepass_Client:
 			if selection.lower() == 'q':
 				sys.exit()
 			elif selection.lower() == 'p':
-				print(self.database.get(True))
+				print(keepass.get_database())
 			elif selection.lower() == 's':
-				#path = os.path.join(os.path.dirname(self.path), 'out.kdbx')
-				self.keepass.save(self.path)
+				keepass.save()
 			elif selection.isdigit() and selection == '1':
 				self.show_menu_groups()
 				break
@@ -42,7 +39,7 @@ class Keepass_Client:
 			print()
 
 	def show_menu_groups(self):
-		groups = self.database.get_groups()
+		groups = keepass.get_all_groups()
 
 		while True:
 			print("--- Groups ---")
@@ -60,7 +57,7 @@ class Keepass_Client:
 				break
 			elif selection.lower() == 'a':
 				name = input("Name: ")
-				self.database.add_group(name)
+				keepass.add_group(name)
 				self.show_menu_groups()
 				break
 			elif selection.isdigit() and int(selection) <= len(groups):
@@ -123,17 +120,13 @@ class Keepass_Client:
 
 	def add_attachment(self, entry):
 		while True:
-			path = input("Path: ")
+			try:
+				path = input("Path: ")
 
-			if path and os.path.isfile(path):
-				filename = os.path.basename(path)
-				with open(path, 'rb') as file:
-
-					content = file.read()
-					ref_id = self.database.add_attachment(entry, filename, content)
-				break
-			else:
-				print("File does not exist")
+				keepass.add_attachment(entry, path)
+				return
+			except Exception as e:
+				print(str(e))
 
 	def remove_attachment(self, entry):
 		id = int(input("Which one: "))
@@ -143,7 +136,7 @@ class Keepass_Client:
 		if id >= len(attachments):
 			print("Invalid input")
 		else:
-			self.database.remove_attachment(entry, attachments[id])
+			keepass.remove_attachment(entry, attachments[id])
 			print("Attachment removed")
 
 	def show_entry(self, entry):

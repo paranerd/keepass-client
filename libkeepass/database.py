@@ -238,7 +238,7 @@ class Database:
 
 	def get_attachment(self, id):
 		"""
-		Get attachment filename
+		Get attachment content
 
 		@param string id
 		@return string
@@ -250,12 +250,10 @@ class Database:
 		else:
 			return ""
 
-	def add_attachment(self, entry, filename, content):
+	def add_attachment(self, content):
 		"""
-		Add attachment to database and entry node
+		Add attachment to database
 
-		@param Entry entry
-		@param string filename
 		@param bytes content
 		@return string
 		"""
@@ -283,16 +281,12 @@ class Database:
 			# Add attachment to database
 			node_binaries.append(binary)
 
-		# Add attachment to entry
-		entry.add_attachment(filename, next_id)
-
 		return next_id
 
-	def remove_attachment(self, entry, attachment):
+	def remove_attachment(self, attachment):
 		"""
 		Remove attachment
 
-		@param Entry entry
 		@param Attachment attachment
 		"""
 		# Is the attachment used anywhere else?
@@ -302,5 +296,3 @@ class Database:
 			# Remove attachment from database
 			node_binary = self.root.xpath('/KeePassFile/Meta/Binaries/Binary[@ID="{}"]'.format(attachment.get_id()))[0]
 			node_binary.getparent().remove(node_binary)
-
-		entry.remove_attachment(attachment)
